@@ -1,0 +1,3 @@
+<launch>
+  <node pkg="ball" type="ball_node" name="ball_node" output="screen"/>
+</launch>

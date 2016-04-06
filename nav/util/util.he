@@ -1,0 +1,212 @@
+#include <fcntl.h>
+//#include <math.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <termios.h>
+#include "util/util.h"
+
+#define FULL        65
+#define MOVE_TO_XY  70
+
+#define BUFFSIZE    256
+#define UART2       "/dev/ttyO2"
+#define UART4       "/dev/ttyO4"
+#define SENSOR_WAIT 25000
+#define THRESH	    16
+
+const char runScript	   = {153};
+const char fullMode[2]     = {128,132};
+
+int uart2, uart4;
+short x,y;
+/*
+int initSerial(const char * path) {
+
+	int fd;
+	struct termios uart,old;
+
+	fd = open(path, O_RDWR | O_NOCTTY);
+
+	if(fd < 0) {
+		fprintf(stderr, "Port failed_on to open\n");
+		exit(0);
+	}
+
+	tcgetattr(fd, &old);
+	memset(&uart, 0, sizeof uart);
+
+	if(strcmp(path,UART2) == 0)
+		uart.c_cflag = B57600 | CS8 | CLOCAL | CREAD;
+	else
+		uart.c_cflag = B115200 | CS8 | CLOCAL | CREAD;
+		
+	uart.c_iflag = IGNPAR | ICRNL;
+	uart.c_oflag = 0;
+	uart.c_lflag = 0;
+
+	uart.c_cc[VTIME] = 0;
+	uart.c_cc[VMIN]  = 1;
+
+
+	tcflush(fd, TCIFLUSH);
+	tcsetattr(fd,TCSANOW,&uart);
+
+	return fd;
+}
+
+short arctan(double x, double y) {
+
+	short theta;
+
+	if(x == 0) 
+		return (y > 0) ? 90 : -90;
+
+	theta = ceil(atan(y/x)*180/M_PI);
+	if(x < 0) {
+		return (y < 0) ? theta - 180 : theta + 180;
+	} else {
+		return theta;
+	}
+}
+
+int getSensorDistance(char * detected) {
+	
+	char sendBuff[BUFFSIZE];
+	char recvBuff[BUFFSIZE];
+
+	sendBuff[0] = 'A';
+	write(uart4,&sendBuff,1);
+	usleep(SENSOR_WAIT);
+	read(uart4,&recvBuff,2);
+
+	detected[0] = recvBuff[0];
+	detected[1] = recvBuff[1];
+
+	return (detected[0] < detected[1]) ? detected[0] : detected[1];
+}
+
+void rotateBasis(short theta) {
+	short temp_x,temp_y;
+
+	temp_x = cos(theta*M_PI/180) * (x) + -sin(theta*M_PI/180) * (y);
+	temp_y = sin(theta*M_PI/180) * (x) + cos(theta*M_PI/180) * (y);
+
+	x = temp_x;
+	y = temp_y;
+}
+
+void step(short stepSize) {
+
+	char forward[15]        = {152,13,137,SPEED_U,SPEED_L,128,0,156,0,STEP,137,0,0,0,0};
+	forward[8] = stepSize >> 8;
+	forward[9] = stepSize & 0xff;
+
+	write(uart2,&forward,15);
+	write(uart2,&runScript,1);
+	
+	usleep(STEP*1000000/SPEED_L);
+}
+
+short getAngle() {
+
+	const char readAngleSensor[2] = {142,20};
+	char recvBuff[2];
+
+	write(uart2,&readAngleSensor,2);
+	usleep(SENSOR_WAIT);
+	read(uart2,&recvBuff,2);
+
+	return -((recvBuff[0] << 8) | recvBuff[1]);
+}
+
+void turnAngle(int angle) {
+
+	char turn[15] = {152,13,137,SPEED_U,SPEED_L,0,1,157,0,0,137,0,0,0,0};
+
+	turn[8] = angle >> 8;
+	turn[9] = angle & 0xff;
+
+	if(angle < 0) {
+		turn[5] = 255;
+		turn[6] = 255;
+	}
+
+	write(uart2,&turn,15);
+	write(uart2,&runScript,1);
+	usleep(33333 * abs(angle));
+}
+
+short orient() {
+	short angle;
+	
+	angle = arctan(x,y);
+	
+	turnAngle(angle);
+
+	rotateBasis(-angle);
+
+	return angle;
+}
+*/
+int main(int argc, char *argv[]) {
+	char recvBuff[BUFFSIZE];
+	char sendBuff[BUFFSIZE];
+	int objDistance;
+
+	char detectedObjs[2];
+
+	short orientation, heading;
+	if(argc != 4) {
+		printf("usage: %s port\n", argv[0]);
+		return 1;
+	}
+
+	uart2 = initSerial(UART2);
+	uart4 = initSerial(UART4);
+
+	write(uart2,&fullMode,2);
+	
+	heading = 0;
+
+	getSensorDistance(detectedObjs);
+	switch(atoi(argv[1])) {
+	case(FULL):
+		write(uart2,&fullMode,2);
+		break;
+	case(MOVE_TO_XY):
+		x = atoi(argv[2]);
+		y = atoi(argv[3]);
+		while(abs(x) > STEP/2 || abs(y) > STEP/2) {
+			orientation = orient();
+			turnAngle(-heading);
+			heading = 0;
+			objDistance = getSensorDistance(detectedObjs);
+			getAngle();
+			while(objDistance < THRESH) {
+				if(detectedObjs[1] < THRESH) {
+					turnAngle(30);
+					heading += 30;
+				} else {
+					turnAngle(-30);
+					heading -= 30;
+				}
+				objDistance = getSensorDistance(detectedObjs);
+			}
+
+			step(STEP);
+		
+			if (x > 0) 
+				x -= STEP * cos(heading * M_PI/180); 
+			else 
+				x += STEP * cos(heading * M_PI/180);
+			if (y > 0)				
+				y += STEP * sin(heading * M_PI/180); 
+			else
+				y -= STEP * sin(heading * M_PI/180);
+		}
+		break;
+	default:
+		break;
+	}
+}

@@ -1,0 +1,12 @@
+<launch>
+    <node pkg="assignment3" type="detect" name="detect" />
+	<node pkg="speedydug_servers" type="spin_server" name="spin_server">
+		<remap from="/iRobot_0/cmd_vel" to="/turtle1/cmd_vel"/>
+	</node>
+
+	<node pkg="turtlesim" type="turtlesim_node" name="turtlesim_node" />
+	
+<!--
+
+-->
+</launch>

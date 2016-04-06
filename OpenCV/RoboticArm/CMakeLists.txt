@@ -1,0 +1,6 @@
+cmake_minimum_required (VERSION 2.8)
+PROJECT( main )
+FIND_PACKAGE( OpenCV REQUIRED )
+set(SOURCES main.cpp ball.cpp ball.h)
+ADD_EXECUTABLE( main ${SOURCES})
+TARGET_LINK_LIBRARIES( main ${OpenCV_LIBS} )

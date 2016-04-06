@@ -1,0 +1,42 @@
+#IncludeRegexLine: ^[ 	]*#[ 	]*(include|import)[ 	]*[<"]([^">]+)([">])
+
+#IncludeRegexScan: ^.*$
+
+#IncludeRegexComplain: ^$
+
+#IncludeRegexTransform: 
+
+/home/garza/Documents/OpenCV/RoboticArm/ball.h
+opencv2/imgproc/imgproc.hpp
+-
+opencv2/core/core.hpp
+-
+opencv2/highgui/highgui.hpp
+-
+iostream
+-
+math.h
+-
+stdio.h
+-
+string
+-
+
+/home/garza/Documents/OpenCV/RoboticArm/main.cpp
+opencv2/imgproc/imgproc.hpp
+-
+opencv2/core/core.hpp
+-
+opencv2/highgui/highgui.hpp
+-
+iostream
+-
+math.h
+-
+stdio.h
+-
+limits.h
+-
+ball.h
+/home/garza/Documents/OpenCV/RoboticArm/ball.h
+

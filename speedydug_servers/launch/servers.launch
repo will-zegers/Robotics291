@@ -1,0 +1,17 @@
+<launch>
+<!--
+    <node pkg="assignment3" type="detect" name="detect" />
+-->
+
+	<node pkg="irobotcreate2" type="irobotcreate2" name="irobotcreate2"/>
+
+	<node pkg="speedydug_servers" type="spin_server" name="spin_server">
+		<remap from="/track_point" to="track_point_right"/>
+
+	</node>
+
+	<node pkg="speedydug_servers" type="approach_server" name="approach_server">
+		<remap from="/track_point" to="track_point_right"/>
+	</node>
+	
+</launch>

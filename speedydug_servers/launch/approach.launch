@@ -1,0 +1,16 @@
+<launch>
+	<!--
+    <node pkg="assignment3" type="detect" name="detect1" />
+	-->
+
+	<node pkg="speedydug_servers" type="approach_server" name="approach_server">
+		<remap from="track_point" to="track_point_right"/>
+		<remap from="/iRobot_0/cmd_vel" to="/turtle1/cmd_vel"/>
+	</node>
+
+	<node pkg="turtlesim" type="turtlesim_node" name="turtlesim_node" />
+	
+<!--
+
+-->
+</launch>
