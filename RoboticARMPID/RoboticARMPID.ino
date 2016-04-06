@@ -9,6 +9,10 @@ For use with the Adafruit Motor Shield v2
 
 #include <SoftI2C_Adafruit_MotorShield.h>
 #include <PID_v1.h>
+#include <elapsedMillis.h>
+#include "Ultrasonic.h"
+
+#define DEBUG 1
 
 // ADC motor joints pin number
 #define M1_ADC_PIN 0
@@ -18,7 +22,7 @@ For use with the Adafruit Motor Shield v2
 #define IR_ADC_PIN 4
 
 //Define known positions
-#define M1_CLOSE 225
+#define M1_CLOSE 228
 #define M1_OPEN 350
 
 #define M1_RESET 350
@@ -40,27 +44,57 @@ For use with the Adafruit Motor Shield v2
 
 // Initial speed for quickly moving to a position
 #define M1_SPEED_1 30
-#define M2_SPEED_1 70
+#define M2_SPEED_1 50
 #define M3_SPEED_1 60
 #define M4_SPEED_1 60
 
 // Slower speed to improve accuracy
 #define M1_SPEED_2 30
 #define M2_SPEED_2 30
-#define M3_SPEED_2 20
+#define M3_SPEED_2 22
 #define M4_SPEED_2 25
 
 // Slower speed to improve accuracy
 #define M1_SPEED_3 30
 #define M2_SPEED_3 30
-#define M3_SPEED_3 20
+#define M3_SPEED_3 22
 #define M4_SPEED_3 20
 
+#define US_MODE 1
+#define ARM_MODE 2
+#define NO_MODE 0
+
+#define IR_SEES_BALL 420
+
 #define MOTOR_ERROR -1
+
+#define red_trig_pin  12
+#define red_echo_pin  13
+#define blue_trig_pin 10
+#define blue_echo_pin 11
+#define THRESHOLD     12.0 //inches
+
+#define FREQ   38000
+#define BEACON 4
+#define D_SIZE 8
+
+#define WAIT_NEXT() delay(1000/(BEACON * D_SIZE) )
+#define WAIT_HALF() delay(1000/(2 * BEACON * D_SIZE) )
+
+const uint8_t target = 0x57;
+uint8_t bit_rd1;
+uint8_t bit_rd2;
 
 int moveMotorTo(int pMotorNum, int pTargetValue);
 void movePIDMotorTo(int pMotorNum, int pTargetValue);
 void readTrimpots();
+int getIrSignal();
+
+elapsedMillis timer0;
+
+//Ultrasonic sensor declarations
+Ultrasonic us_red(red_trig_pin, red_echo_pin);
+Ultrasonic us_blue(blue_trig_pin, blue_echo_pin);
 
 // Create the motor shield object with the default I2C address
 Adafruit_MotorShield AFMS = Adafruit_MotorShield(); 
@@ -73,6 +107,8 @@ Adafruit_DCMotor *motor4 = AFMS.getMotor(4);
 
 //PID variables
 double Setpoint, Input, Output;
+
+int cur_mode = NO_MODE;
 
 //PID object and tunning
 PID motorPID(&Input, &Output, &Setpoint,4,5,1, DIRECT);
@@ -92,7 +128,7 @@ void setup() {
 
   // PIDs Init
   motorPID.SetMode(AUTOMATIC);
-  motorPID.SetOutputLimits(-240, 240);
+  motorPID.SetOutputLimits(-100, 100);
 
   // Timer
   //Timer1.initialize(500000);         // initialize timer1, and set a 1/2 second period
@@ -105,78 +141,161 @@ void loop() {
   int curMotorNum = 0;
   
   // Read ADC joints values 
-  while(Serial.available() > 0)  {
+  if(Serial.available() > 0)  {
     str = Serial.readStringUntil('\n');
-
-    //== is the same as .equals for arduino strings
-    if(str == "read") {
-      //output all trimpot readings
-      readTrimpots();
-    } else if(str == "irtest") {
-      IRTest();
-    } else if(str == "reset") {
-      movePIDMotorTo(4, M4_RESET);
-      movePIDMotorTo(3, M3_RESET);
-      moveMotorTo(2, M2_RESET);
-      moveMotorTo(1, M1_RESET);
-    } else if(str == "6cm") {
-      moveMotorTo(4, 230);
-      moveMotorTo(3, 575);
-      moveMotorTo(2, 500);
-      moveMotorTo(1, M1_CLOSE);
-    } else if(str == "7cm") {
-      moveMotorTo(4, 230);
-      moveMotorTo(3, 555);
-      moveMotorTo(2, 500);
-      moveMotorTo(1, M1_CLOSE);
-    } else if(str == "8cm") {
-      moveMotorTo(4, 230);
-      moveMotorTo(3, 538);
-      moveMotorTo(2, 500);
-      moveMotorTo(1, M1_CLOSE);
-    } else if(str == "9cm") {
-      moveMotorTo(4, 220);
-      moveMotorTo(3, 520);
-      moveMotorTo(2, 500);
-      moveMotorTo(1, M1_CLOSE);
-    } else if(str == "10cm") {
-      moveMotorTo(4, 220);
-      moveMotorTo(3, 508);
-      moveMotorTo(2, 500);
-      moveMotorTo(1, M1_CLOSE);
-    } else if(str == "11cm") {
-      moveMotorTo(4, 220);
-      moveMotorTo(3, 500);
-      moveMotorTo(2, 500);
-      moveMotorTo(1, M1_CLOSE);
-    } else if(str == "12cm") {
-      moveMotorTo(4, 210);
-      moveMotorTo(3, 484);
-      moveMotorTo(2, 500);
-      moveMotorTo(1, M1_CLOSE);
-    } else if(str == "13cm") {
-      moveMotorTo(4, 175);
-      moveMotorTo(3, 427);
-      moveMotorTo(2, 500);
-      moveMotorTo(1, M1_CLOSE);
-    } else if(str == "14cm") {
-      moveMotorTo(4, 150);
-      moveMotorTo(3, 368);
-      moveMotorTo(2, 500);
-      moveMotorTo(1, M1_CLOSE);
-    } else if(str == "15cm") {
-      moveMotorTo(4, 125);
-      moveMotorTo(3, 339);
-      moveMotorTo(3, 339);
-      moveMotorTo(3, 339);
-      moveMotorTo(2, 500);
-      moveMotorTo(1, M1_CLOSE);
-    } else {
-      sscanf(str.c_str(),"%d %d", &curMotorNum, &curTargetVal);
-      if (curMotorNum == 3 || curMotorNum == 4) {
-        movePIDMotorTo(curMotorNum, curTargetVal);
+    if(cur_mode == NO_MODE) {
+      //== is the same as .equals for arduino strings
+      if(str == "u") {
+        cur_mode = US_MODE;
+      } else if(str == "a") {
+        cur_mode = ARM_MODE;
       } else {
-        moveMotorTo(curMotorNum, curTargetVal);
+        Serial.println("b");
+      }
+    } else if(cur_mode == US_MODE) {
+      if(str == "u") {
+        cur_mode = US_MODE;
+      } else if(str == "a") {
+        cur_mode = ARM_MODE;
+      } else if(str == "pollu") {
+        String res;
+        bool red = false;
+        bool blue = false;
+        res = "none";
+        //Run Ultrasonic code here
+        float red_dist = us_red.check_distance();
+        float blue_dist = us_blue.check_distance();
+        if(red_dist < THRESHOLD) {
+          res = "red";
+          red = true;
+        }
+        if(blue_dist < THRESHOLD) {
+          res = "blue";
+          blue = true;
+        }
+        if(red && blue) {
+          res = "both";
+        }  
+        Serial.println(res);  
+        if(DEBUG == 1) {
+          Serial.println(red_dist);   
+          Serial.println(blue_dist); 
+        }
+      } else if(str == "pollb") {
+        Serial.println(getIrSignal());
+      } else {
+        Serial.println("b");
+      }
+    } else if(cur_mode == ARM_MODE) {
+      //== is the same as .equals for arduino strings
+      if(str == "u") {
+        cur_mode = US_MODE;
+      } else if(str == "a") {
+        cur_mode = ARM_MODE;
+      } else if(str == "read") {
+        //output all trimpot readings
+        readTrimpots();
+      } else if(str == "irtest") {
+        IRTest();
+      } else if(str == "open") {
+        openClaw();
+      } else if(str == "drop") {
+        openClaw();
+        Serial.println("g");
+      }  else if(str == "reset") {
+        movePIDMotorTo(4, 450);
+        movePIDMotorTo(3, 200);
+        openClaw();
+        Serial.println("g");
+      } else if(str == "12cm" || str == "13cm") {
+        movePIDMotorTo(4, 290);
+        sweepMotor(3, 480, 530);
+        closeClaw();
+        movePIDMotorTo(4, 450);
+        movePIDMotorTo(3, 200);
+        if((analogRead(IR_ADC_PIN) >= IR_SEES_BALL) && (analogRead(M1_ADC_PIN) > 215)) {
+          char array[20];
+          sprintf(array, "g%i", analogRead(IR_ADC_PIN));
+          Serial.println(array);
+        } else {
+          openClaw();
+          char array[20];
+          sprintf(array, "b%i", analogRead(IR_ADC_PIN));
+          Serial.println(array);
+        }
+      } else if(str == "14cm") {
+        movePIDMotorTo(4, 285);
+        sweepMotor(3, 460, 525);
+        closeClaw();
+        movePIDMotorTo(4, 450);
+        movePIDMotorTo(3, 200);
+        if((analogRead(IR_ADC_PIN) >= IR_SEES_BALL) && (analogRead(M1_ADC_PIN) > 215)) {
+          char array[20];
+          sprintf(array, "g%i", analogRead(IR_ADC_PIN));
+          Serial.println(array);
+        } else {
+          openClaw();
+          char array[20];
+          sprintf(array, "b%i", analogRead(IR_ADC_PIN));
+          Serial.println(array);
+        }
+      } else if(str == "15cm") {
+        movePIDMotorTo(4, 260);
+        sweepMotor(3, 420, 490);
+        closeClaw();
+        movePIDMotorTo(4, 450);
+        movePIDMotorTo(3, 200);
+        if((analogRead(IR_ADC_PIN) >= IR_SEES_BALL) && (analogRead(M1_ADC_PIN) > 215)) {
+          char array[20];
+          sprintf(array, "g%i", analogRead(IR_ADC_PIN));
+          Serial.println(array);
+        } else {
+          openClaw();
+          char array[20];
+          sprintf(array, "b%i", analogRead(IR_ADC_PIN));
+          Serial.println(array);
+        }
+      } else if(str == "16cm") {
+        movePIDMotorTo(4, 255);
+        sweepMotor(3, 410, 480);
+        closeClaw();
+        movePIDMotorTo(4, 450);
+        movePIDMotorTo(3, 200);
+        if((analogRead(IR_ADC_PIN) >= IR_SEES_BALL) && (analogRead(M1_ADC_PIN) > 215)) {
+          char array[20];
+          sprintf(array, "g%i", analogRead(IR_ADC_PIN));
+          Serial.println(array);
+        } else {
+          openClaw();
+          char array[20];
+          sprintf(array, "b%i", analogRead(IR_ADC_PIN));
+          Serial.println(array);
+        }
+      } else if(str == "17cm") {
+        movePIDMotorTo(4, 250);
+        sweepMotor(3, 390, 470);
+        closeClaw();
+        movePIDMotorTo(4, 450);
+        movePIDMotorTo(3, 200);
+        if((analogRead(IR_ADC_PIN) >= IR_SEES_BALL) && (analogRead(M1_ADC_PIN) > 215)) {
+          char array[20];
+          sprintf(array, "g%i", analogRead(IR_ADC_PIN));
+          Serial.println(array);
+        } else {
+          openClaw();
+          char array[20];
+          sprintf(array, "b%i", analogRead(IR_ADC_PIN));
+          Serial.println(array);
+        }
+      } else {
+        sscanf(str.c_str(),"%d %d", &curMotorNum, &curTargetVal);
+        if (curMotorNum == 3 || curMotorNum == 4) {
+          movePIDMotorTo(curMotorNum, curTargetVal);
+        } else if (curMotorNum == 1 || curMotorNum == 2) {
+          moveMotorTo(curMotorNum, curTargetVal);
+        } else {
+          Serial.println("b");
+        }
       }
     }
   }
@@ -228,21 +347,17 @@ int moveMotorTo(int pMotorNum, int pTargetValue) {
     curSpeed3 = M4_SPEED_3;
   } else {
     // Invalid Motor Number
-    Serial.println("Invalid Motor Number");  //for debugging
-    Serial.println(MOTOR_ERROR);
+    Serial.println("b");
     return -1;
   }
   
   if (pTargetValue > curMax || pTargetValue < curMin) {
     // Invalid Number Range
-    Serial.println("Invalid Number Range");  //for debugging
-    Serial.println(MOTOR_ERROR);
+    Serial.println("b");
     return -1;
   }
-  Serial.println(pTargetValue);  //for debugging
 
   curADCVal = analogRead(curADCPin);
-  Serial.println(curADCVal);  //for debugging
 
   //Slow motor speed after first run
   if(abs(curADCVal - pTargetValue) > 100) {
@@ -255,12 +370,13 @@ int moveMotorTo(int pMotorNum, int pTargetValue) {
 
   done_flag = false;
 
+  timer0 = 0;
+
   // Move motor until it reaches position
   if (curADCVal > pTargetValue) {
-    Serial.println("Moving FORWARD"); //for debugging
     curMotor->run(FORWARD);
     
-    while(done_flag != true) {
+    while(done_flag != true && timer0 < 5000) {
       curIRValue = analogRead(IR_ADC_PIN);
       curADCVal = analogRead(curADCPin);
       delay(10);
@@ -272,15 +388,13 @@ int moveMotorTo(int pMotorNum, int pTargetValue) {
       } else {
         curMotor->setSpeed(curSpeed3);
       }
-      Serial.println(curADCVal);  //for debugging
       // Motor has reach position
       if (curADCVal <= pTargetValue)
           done_flag = true;
     }
   } else {
-    Serial.println("Moving BACKWARD");  //for debugging
     curMotor->run(BACKWARD);
-    while(done_flag != true) {
+    while(done_flag != true && timer0 < 5000) {
       curIRValue = analogRead(IR_ADC_PIN);
       curADCVal = analogRead(curADCPin);
       delay(10);
@@ -292,7 +406,6 @@ int moveMotorTo(int pMotorNum, int pTargetValue) {
       } else {
         curMotor->setSpeed(curSpeed3);
       }
-      Serial.println(curADCVal);  //for debugging
       // Motor has reach position
       if (curADCVal >= pTargetValue)
           done_flag = true;
@@ -306,7 +419,6 @@ int moveMotorTo(int pMotorNum, int pTargetValue) {
 
   curADCVal = analogRead(curADCPin);
   delay(10);  //allow the read to finish
-  Serial.println(curADCVal);  //for debugging
   return curADCVal;
 }
 
@@ -322,10 +434,10 @@ void movePIDMotorTo(int pMotorNum, int pTargetValue) {
   Adafruit_DCMotor *curMotor;
   
   if(pMotorNum == 1) {
-    Serial.println("This Motor doesn't use PID");  //for debugging
+    Serial.println("b");
     return;
   } else if(pMotorNum == 2) {
-    Serial.println("This Motor doesn't use PID");  //for debugging
+    Serial.println("b");
     return;
   } else if(pMotorNum == 3) {
     curMotor = motor3;
@@ -339,15 +451,13 @@ void movePIDMotorTo(int pMotorNum, int pTargetValue) {
     curMin = M4_MIN;
   } else {
     // Invalid Motor Number
-    Serial.println("Invalid Motor Number");  //for debugging
-    Serial.println(MOTOR_ERROR);
+    Serial.println("b");
     return;
   }
 
   if (pTargetValue > curMax || pTargetValue < curMin) {
     // Invalid Number Range
-    Serial.println("Invalid Number Range");  //for debugging
-    Serial.println(MOTOR_ERROR);
+    Serial.println("b");
     return;
   }
 
@@ -361,7 +471,6 @@ void movePIDMotorTo(int pMotorNum, int pTargetValue) {
     curMotor->setSpeed(abs(Output));
 
     sprintf(textbuff,"PID Input/ADC = %d, PID output = %d \n", (int)Input, (int)Output);
-    Serial.print(textbuff);
   
     if(Output < 0) {
       curMotor->run(FORWARD);
@@ -376,14 +485,241 @@ void movePIDMotorTo(int pMotorNum, int pTargetValue) {
         curMotor->run(RELEASE);
         done_flag = true;
       }
-    }
-    
-  }
-
-  Serial.println("FINISH MOVING PID MOTOR"); //for debugging
-  
+    }   
+  } 
 }
 
+
+int sweepMotor(int pMotorNum, int pLow, int pHigh) {
+  //First, move the motor to the correct starting position
+  movePIDMotorTo(pMotorNum, pLow);
+
+  //Next set starting conditions and perform a move with a single speed
+  int curADCVal = 0;
+  int curADCPin = 0;
+  int curMax = 1024;
+  int curMin = 0;
+  int curSpeed = 0;
+  int curIRVal = 0;
+  int maxIRVal = 0;
+  int maxIRVal2 = 0;
+  Adafruit_DCMotor *curMotor;
+  bool done_flag;
+  
+  if(pMotorNum == 1) {
+    curMotor = motor1;
+    curADCPin = M1_ADC_PIN;
+    curMax = M1_MAX;
+    curMin = M1_MIN;
+    curSpeed = M1_SPEED_3;
+  } else if(pMotorNum == 2) {
+    curMotor = motor2;
+    curADCPin = M2_ADC_PIN;
+    curMax = M2_MAX;
+    curMin = M2_MIN;
+    curSpeed = M2_SPEED_3;
+  } else if(pMotorNum == 3) {
+    curMotor = motor3;
+    curADCPin = M3_ADC_PIN;
+    curMax = M3_MAX;
+    curMin = M3_MIN;
+    curSpeed = M3_SPEED_3;
+  } else if(pMotorNum == 4) {
+    curMotor = motor4;
+    curADCPin = M4_ADC_PIN;
+    curMax = M4_MAX;
+    curMin = M4_MIN;
+    curSpeed = M4_SPEED_3;
+  } else {
+    // Invalid Motor Number
+    Serial.println("b");
+    return -1;
+  }
+  
+  if (pLow > curMax || pLow < curMin || pHigh > curMax || pHigh < curMin) {
+    // Invalid Number Range
+    Serial.println("b");
+    return -1;
+  }
+
+  curADCVal = analogRead(curADCPin);
+
+  curMotor->setSpeed(curSpeed);
+
+  done_flag = false;
+
+  // Move motor until it reaches position
+  if (curADCVal > pHigh) {
+    curMotor->run(FORWARD);
+    
+    while(done_flag != true) {
+      curIRVal = analogRead(IR_ADC_PIN);
+      maxIRVal = max(curIRVal, maxIRVal);
+      curADCVal = analogRead(curADCPin);
+      // Motor has reach position
+      if (curADCVal <= pHigh)
+          done_flag = true;
+    }
+  } else {
+    curMotor->run(BACKWARD);
+    while(done_flag != true) {
+      curIRVal = analogRead(IR_ADC_PIN);
+      maxIRVal = max(curIRVal, maxIRVal);
+      curADCVal = analogRead(curADCPin);
+      // Motor has reach position
+      if (curADCVal >= pHigh)
+          done_flag = true;
+    }
+  }
+
+  // Release motors
+  curMotor->run(RELEASE);
+
+  delay(500); //delay for half a second to let the motor settle
+
+  curIRVal = analogRead(IR_ADC_PIN);
+  delay(10);  //allow the read to finish
+
+
+  //Sweep in reverse order and search for the max IR value
+  curADCVal = analogRead(curADCPin);
+
+  done_flag = false;
+
+  // Move motor until it reaches position
+  if (curADCVal > pLow) {
+    curMotor->run(FORWARD);
+    
+    while(done_flag != true) {
+      curIRVal = analogRead(IR_ADC_PIN);
+      maxIRVal2 = max(curIRVal, maxIRVal2);
+      curADCVal = analogRead(curADCPin);
+      // Motor has reach position
+      if (curADCVal <= pLow) {
+        done_flag = true;
+      } else if(curIRVal >= (maxIRVal-8)) {
+        done_flag = true;
+        curMotor->run(RELEASE);
+        return curIRVal;
+        
+      }
+    }
+  } else {
+    curMotor->run(BACKWARD);
+    while(done_flag != true) {
+      curIRVal = analogRead(IR_ADC_PIN);
+      maxIRVal2 = max(curIRVal, maxIRVal2);
+      curADCVal = analogRead(curADCPin);
+      // Motor has reach position
+      if (curADCVal >= pLow) {
+        done_flag = true;
+      } else if(curIRVal >= (maxIRVal-8)) {
+        done_flag = true;
+        curMotor->run(RELEASE);
+        return curIRVal;
+      }
+    }
+  }
+
+  // Release motors
+  curMotor->run(RELEASE);
+
+  delay(500); //delay for half a second to let the motor settle
+
+  curIRVal = analogRead(IR_ADC_PIN);
+  delay(10);  //allow the read to finish
+
+  //Sweep in reverse order a final time to try and find the max IR value
+  curADCVal = analogRead(curADCPin);
+
+  done_flag = false;
+
+  // Move motor until it reaches position
+  if (curADCVal > pHigh) {
+    curMotor->run(FORWARD);
+    
+    while(done_flag != true) {
+      curIRVal = analogRead(IR_ADC_PIN);
+      curADCVal = analogRead(curADCPin);
+      // Motor has reach position
+      if (curADCVal <= pHigh) {
+        done_flag = true;
+      } else if(curIRVal >= (maxIRVal-8) || curIRVal >= (maxIRVal2-8)) {
+        done_flag = true;
+        curMotor->run(RELEASE);
+        return curIRVal;
+        
+      }
+    }
+  } else {
+    curMotor->run(BACKWARD);
+    while(done_flag != true) {
+      curIRVal = analogRead(IR_ADC_PIN);
+      curADCVal = analogRead(curADCPin);
+      // Motor has reach position
+      if (curADCVal >= pHigh) {
+        done_flag = true;
+      } else if(curIRVal >= (maxIRVal-8) || curIRVal >= (maxIRVal2-8)) {
+        done_flag = true;
+        curMotor->run(RELEASE);
+        return curIRVal;
+      }
+    }
+  }
+
+  // Release motors
+  curMotor->run(RELEASE);
+
+  delay(500); //delay for half a second to let the motor settle
+
+  curIRVal = analogRead(IR_ADC_PIN);
+  delay(10);  //allow the read to finish
+
+
+
+
+
+
+
+  
+  return curIRVal;
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+bool isClawOpen() {
+  int ADCVal = analogRead(M1_ADC_PIN);
+  delay(10);
+  if(ADCVal > 350) {
+    return true;
+  } else {
+    return false;
+  }
+}
+
+bool openClaw() {
+  while(!isClawOpen()) {
+    moveMotorTo(1, M1_RESET);
+  }
+  return true;
+}
+
+bool closeClaw() {
+  moveMotorTo(1, M1_CLOSE);
+}
 
 void readTrimpots() {
   int ADCVal = analogRead(M1_ADC_PIN);
@@ -402,6 +738,10 @@ void readTrimpots() {
   delay(10);
   Serial.print("Trimpot 4: ");
   Serial.println(ADCVal);  //for debugging
+  ADCVal = analogRead(IR_ADC_PIN);
+  delay(10);
+  Serial.print("IR: ");
+  Serial.println(ADCVal);  //for debugging
 }
 
 void IRTest() {
@@ -410,5 +750,51 @@ void IRTest() {
     Serial.println(IRValue);  //for debugging
     delay(100);
   }
+}
+
+bool checkIRRange(int lower, int higher) {
+  int goodCount = 0; 
+  int badCount = 0;
+  int IRValue = 0;
+  
+  for(int i = 0; i < 10; i++) {
+    IRValue = analogRead(4);
+    delay(10);
+    if(IRValue >= lower && IRValue <= higher) {
+      goodCount++;
+    } else {
+      badCount++;
+    }
+  }
+
+  if(goodCount >= 5) {
+    return true;
+  } else {
+    return false;
+  }
+}
+
+int getIrSignal() {
+  int i;
+  uint8_t ir_signal;
+  uint8_t res;
+  
+  // Nyquist
+  i = 0;
+  ir_signal = 0;
+  while(2*D_SIZE - 1 > i++) {
+	  if(ir_signal == target) { // Success
+		  return 1;
+ 		}
+
+		bit_rd1 = !digitalRead(7);
+		WAIT_HALF();
+		bit_rd2 = !digitalRead(7);
+		ir_signal = (ir_signal << 1) | ( (bit_rd1 == bit_rd2) ? bit_rd2 : bit_rd1);
+		WAIT_HALF();
+  }
+  
+  // Fail (this time)
+  return 0;
 }
 

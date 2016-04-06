@@ -36,9 +36,13 @@ const int MAX_NUM_OBJECTS=50;
 // minimum and maximum object area
 const int MIN_OBJECT_AREA = 15*15;
 const int MAX_OBJECT_AREA = FRAME_HEIGHT*FRAME_WIDTH/1.5;
+// bucket minimum and maximum object area
+const int BUCKET_MIN_OBJECT_AREA = 60*60;
+const int BUCKET_MAX_OBJECT_AREA = FRAME_HEIGHT*FRAME_WIDTH/1.5;
+const int BUCKET_AREA_READY_TO_DROP = 37000;
 
 // Calibration Modes
-const int SHOW_IMAGES = true;	// true : show directly (Laptop), false: publish it in a ros Node (Odroid)
+const int SHOW_IMAGES = false;	// true : show directly (Laptop), false: publish it in a ros Node (Odroid)
 const int CALIB_THRESHOLD_MODE = false;
 const int CALIB_DEPTH_MODE = false;
 // Depth conversion 
@@ -76,7 +80,7 @@ const int PIXEL_TO_CM [MAX_CM + 1] =
 // int V_MAX = 255;
 // Green balls ROS (downstaris) final, 
 int G_H_MIN = 60;
-int G_H_MAX = 80;
+int G_H_MAX = 74;
 int G_S_MIN = 82;
 int G_S_MAX = 255;
 int G_V_MIN = 80;
@@ -88,6 +92,13 @@ int O_S_MIN = 131;
 int O_S_MAX = 255;
 int O_V_MIN = 63;
 int O_V_MAX = 255;
+// Bucket 
+int B_H_MIN = 80;
+int B_H_MAX = 110;
+int B_S_MIN = 63;
+int B_S_MAX = 201;
+int B_V_MIN = 108;
+int B_V_MAX = 255;
 
 // Cameras
 Mat right_cam;
@@ -301,6 +312,132 @@ void detectBalls (vector <Ball> &theBalls, Mat threshold)
     }
 }
 
+// Bucket Recognition, It returns the center of mass of the bucket and the area in the variable
+geometry_msgs::Point detectBucket (Mat threshold, Mat &frame, int &bucket_area) 
+{
+
+    Mat temp;
+    threshold.copyTo(temp);
+
+    //Position
+    geometry_msgs::Point bucket_center;
+    bucket_center.x = -1;
+    bucket_center.y = -1;
+
+    // Init dest buffer
+    //dest = Mat::zeros(threshold.rows, threshold.cols, threshold.type());
+
+    // These two vectors needed for output of findContours
+    vector< vector<Point> > contours;
+    vector<Vec4i> hierarchy;
+
+    // Find contours of filtered image using openCV findContours function
+    findContours(temp,contours,hierarchy,CV_RETR_CCOMP,CV_CHAIN_APPROX_SIMPLE );
+
+    // Use moments method to find our filtered object
+    double refArea = 0;
+    int x = 0;
+    int y = 0;
+    int objectNum = 0;
+    bool objectFound = false;
+
+    if (hierarchy.size() > 0) {
+        int numObjects = hierarchy.size();
+        // If number of objects greater than MAX_NUM_OBJECTS we have a noisy filter
+        if(numObjects<MAX_NUM_OBJECTS){
+            for (int index = 0; index >= 0; index = hierarchy[index][0]) {
+
+                Moments moment = moments((cv::Mat)contours[index]);
+                double area = moment.m00;
+                double perimeter = arcLength(contours[index],true);
+
+                //if the area is less than 20 px by 20px then it is probably just noise
+                //if the area is the same as the 3/2 of the image size, probably just a bad filter
+                //we only want the object with the largest area so we safe a reference area each
+                //iteration and compare it to the area in the next iteration.
+                if(area>BUCKET_MIN_OBJECT_AREA) {
+                    
+                    x = moment.m10/area;
+                    y = moment.m01/area;
+
+                    objectFound = true;
+                    objectNum+=1;
+
+                    // Add center of biggest bucket area
+                    if (area > bucket_area) {
+	                    bucket_center.x = x;
+	    				bucket_center.y = y;
+	    				bucket_area = area;
+	    			}
+
+                } else {
+                    objectFound = false; 
+
+                }
+
+            }
+
+        } else {
+           printf("Too much noise\n"); 
+        }
+    }
+
+    return bucket_center;
+}
+
+void drawBucketPosition(geometry_msgs::Point point_bucket_right, Mat &frame_right, int bucket_area_right,
+	geometry_msgs::Point point_bucket_left, Mat &frame_left, int bucket_area_left) 
+{
+
+	char textBuff[50];
+	int x, y, bucket_area, bucket_area_avg;
+	Mat frame;
+
+	if (bucket_area_right!=-1 && bucket_area_left!=-1) {
+
+
+/*
+		// Draw center and add coordinates for bucket right 
+		x = point_bucket_right.x;
+		y = point_bucket_right.y;
+		bucket_area = bucket_area_right;
+		frame = frame_right;
+		circle(frame,Point(x,y),4,Scalar( 0, 255, 0 ),2, 1);
+		sprintf(textBuff, "(%d, %d)", x , y);
+		putText(frame,textBuff,Point(x-25,y+15),FONT_HERSHEY_SIMPLEX,0.3,Scalar(0,0,255),1);
+		sprintf(textBuff, "%d area", bucket_area);
+		putText(frame,textBuff,Point(x-15,y+35),FONT_HERSHEY_SIMPLEX,0.6,Scalar(255,0,0),1);
+		//sprintf(textBuff, "%d avg", bucket_area_avg);
+		//putText(frame,textBuff,Point(x-15,y+55),FONT_HERSHEY_SIMPLEX,0.6,Scalar(0,255,0),1);
+
+		x = point_bucket_left.x;
+		y = point_bucket_left.y;
+		bucket_area = bucket_area_left;
+		frame = frame_left;
+		circle(frame,Point(x,y),4,Scalar( 0, 255, 0 ),2, 1);
+		sprintf(textBuff, "(%d, %d)", x , y);
+		putText(frame,textBuff,Point(x-25,y+15),FONT_HERSHEY_SIMPLEX,0.3,Scalar(0,0,255),1);
+		sprintf(textBuff, "%d area", bucket_area);
+		putText(frame,textBuff,Point(x-15,y+35),FONT_HERSHEY_SIMPLEX,0.6,Scalar(255,0,0),1);
+		//sprintf(textBuff, "%d avg", bucket_area_avg);
+		//putText(frame,textBuff,Point(x-15,y+55),FONT_HERSHEY_SIMPLEX,0.6,Scalar(0,255,0),1);
+		*/
+
+		// Average
+		x = (point_bucket_right.x + point_bucket_left.x) / 2;
+		y = (point_bucket_right.y + point_bucket_left.y) / 2;
+		bucket_area_avg = (bucket_area_right + bucket_area_left) / 2;
+		frame = frame_left;
+		circle(frame,Point(x,y),4,Scalar( 0, 255, 0 ),2, 1);
+		sprintf(textBuff, "(%d, %d)", x , y);
+		putText(frame,textBuff,Point(x-25,y+15),FONT_HERSHEY_SIMPLEX,0.3,Scalar(0,0,255),1);
+		sprintf(textBuff, "%d avg", bucket_area_avg);
+		putText(frame,textBuff,Point(x-15,y+35),FONT_HERSHEY_SIMPLEX,0.6,Scalar(0,255,0),1);
+
+	}
+
+}
+
 void drawBallsPosition (vector <Ball> theBalls, Mat &frame) 
 {
 
@@ -505,6 +642,26 @@ void publishClosestBallPosition (vector <Ball> balls_right, vector <Ball> balls_
 
 }
 
+void publishBucketPosition(geometry_msgs::Point bucket_point_right, geometry_msgs::Point bucket_point_left,
+	int area_bucket_right, int area_bucket_left, 
+	ros::Publisher pub_bucket_point_avg, ros::Publisher pub_bucket_area) 
+{
+
+	if (area_bucket_right != -1 && area_bucket_left != -1) {
+		// Publish closest ball Average (X,Y) position
+		geometry_msgs::Point point_avg;
+		point_avg.x = (bucket_point_right.x + bucket_point_left.x) / 2.0;
+		point_avg.y = (bucket_point_right.y + bucket_point_left.y) / 2.0;
+		pub_bucket_point_avg.publish(point_avg);
+
+		// Publsh depth
+		std_msgs::Int32 msg;
+		msg.data = (area_bucket_right + area_bucket_left) / 2;
+		pub_bucket_area.publish(msg);
+	}
+
+}
+
 /*!
  * \brief callback when the left image is received
  * \param ptr pointer to the image
@@ -550,12 +707,20 @@ int main( int argc, char** argv )
     vector <Ball> balls_right;
     vector <Ball> balls_left;
 
+    // Bucket Objects/vars
+    geometry_msgs::Point bucket_point_right;
+    geometry_msgs::Point bucket_point_left;
+    int area_bucket_right = -1;
+    int area_bucket_left = -1;
+
 	ros::init(argc, argv, "tracker");
 	ros::NodeHandle n;
 	ros::Rate r(0.1);
 	image_transport::ImageTransport it(n);
 	ros::Publisher pub_track_point_avg = n.advertise<geometry_msgs::Point>("track_point_avg", 100);
+	ros::Publisher pub_bucket_point_avg = n.advertise<geometry_msgs::Point>("track_bucket_point_avg", 100);
 	ros::Publisher pub_depth = n.advertise<std_msgs::Int32>("track_point_depth", 100);
+	ros::Publisher pub_bucket_area = n.advertise<std_msgs::Int32>("track_bucket_area", 100);
 	image_transport::Subscriber left_sub = it.subscribe("stereo/left/image_rect_color", 1, leftImageCallback);
 	image_transport::Subscriber right_sub = it.subscribe("stereo/right/image_rect_color", 1, rightImageCallback);
 	image_transport::Publisher opencv_left_pub = it.advertise("track_opencv_result_left", 1);
@@ -573,6 +738,8 @@ int main( int argc, char** argv )
     Mat green_threshold_left;
     Mat orange_threshold_right;
     Mat orange_threshold_left;
+    Mat bucket_threshold_right;
+    Mat bucket_threshold_left;
 	Mat imgWithLines;
     Mat HSV;
 
@@ -620,6 +787,11 @@ int main( int argc, char** argv )
             //show the thresholded image left
             imshow(thresholded_img_left_title.c_str(), threshold_left); 
 
+            // Show Balls detection
+	        imshow(left_img_title.c_str(), frame_left);
+	        imshow(right_img_title.c_str(), frame_right);
+	        
+
             if(waitKey(30) >= 0) break;
 
             // Skip the rest of the while loop
@@ -642,7 +814,7 @@ int main( int argc, char** argv )
         morphOps(green_threshold_right);
 
         // Segment image and detect circles
-        detectBalls(balls_left, green_threshold_right);
+        detectBalls(balls_right, green_threshold_right);
 
         /// ORANGE COLOR
 
@@ -653,7 +825,21 @@ int main( int argc, char** argv )
         morphOps(orange_threshold_right);
 
         // Segment image and detect circles
-        detectBalls(balls_left, orange_threshold_right);
+        detectBalls(balls_right, orange_threshold_right);
+
+        /// BUCKET COLOR
+
+		// Filter the image leving only the RGB chosen colors
+		inRange(HSV, Scalar(B_H_MIN, B_S_MIN, B_V_MIN), Scalar(B_H_MAX, B_S_MAX, B_V_MAX), bucket_threshold_right);
+
+        // Perform morphological operations on thresholded image to eliminate noise
+        morphOps(bucket_threshold_right);
+
+        // Segment image and detect circles
+        bucket_point_right = detectBucket(bucket_threshold_right, frame_right, area_bucket_right);
+
+
+
 
 
         ////// Left Image Processing  ///////
@@ -670,7 +856,7 @@ int main( int argc, char** argv )
         morphOps(green_threshold_left);
 
         // Segment image and detect circles
-        detectBalls(balls_right, green_threshold_left);
+        detectBalls(balls_left, green_threshold_left);
 
         /// ORANGE COLOR
 
@@ -681,7 +867,21 @@ int main( int argc, char** argv )
         morphOps(orange_threshold_left);
 
         // Segment image and detect circles
-        detectBalls(balls_right, orange_threshold_left);
+        detectBalls(balls_left, orange_threshold_left);
+
+        /// BUCKET COLOR
+
+        // Filter the image leving only the RGB chosen colors
+        inRange(HSV, Scalar(B_H_MIN, B_S_MIN, B_V_MIN), Scalar(B_H_MAX, B_S_MAX, B_V_MAX), bucket_threshold_left);
+
+        // Perform morphological operations on thresholded image to eliminate noise
+        morphOps(bucket_threshold_left);
+
+        // Segment image and detect circles
+        bucket_point_left = detectBucket(bucket_threshold_left, frame_left, area_bucket_left);
+
+
+
 
 
         ////// Stereo Image Processing  ///////
@@ -690,14 +890,25 @@ int main( int argc, char** argv )
         measureBallsDepth(balls_right, balls_left);
 
         // Draw balls position and display data
-        drawBallsPosition(balls_right, frame_left);
+        drawBallsPosition(balls_right, frame_right);
 
         // Draw balls position and display data
-        drawBallsPosition(balls_left, frame_right);
+        drawBallsPosition(balls_left, frame_left);
+
+        // Draw Bucket Position
+        drawBucketPosition(bucket_point_right, frame_right, area_bucket_right,
+         bucket_point_left, frame_left, area_bucket_left);
+
+        
 
         // Publish Point data of closest ball
         publishClosestBallPosition(balls_right, balls_left, 
         	pub_track_point_avg, pub_depth);
+
+        // Publish Point data of the bucket
+        publishBucketPosition(bucket_point_right, bucket_point_left, 
+        	area_bucket_right, area_bucket_left,
+        	pub_bucket_point_avg, pub_bucket_area);
 
 
         ////// Show STUFF ///////
@@ -706,8 +917,8 @@ int main( int argc, char** argv )
         if (SHOW_IMAGES == true) {
 
 	        // Show Thresholded left and right images
-	        imshow(thresholded_img_left_title.c_str(), green_threshold_left); 
-	        imshow(thresholded_img_right_title.c_str(), green_threshold_right); 
+	        imshow(thresholded_img_left_title.c_str(), bucket_threshold_left); 
+	        imshow(thresholded_img_right_title.c_str(), bucket_threshold_right); 
 
 	        // Show Balls detection
 	        imshow(left_img_title.c_str(), frame_left);
@@ -726,6 +937,9 @@ int main( int argc, char** argv )
         // Clear vector balls
         balls_right.clear();
         balls_left.clear();
+        // Clear bucket area
+        area_bucket_right = -1;
+    	area_bucket_left = -1;
 
 		ros::spinOnce();
 

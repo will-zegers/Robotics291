@@ -2,16 +2,33 @@
 <!--
     <node pkg="assignment3" type="detect" name="detect" />
 -->
-
+<!--
 	<node pkg="irobotcreate2" type="irobotcreate2" name="irobotcreate2"/>
-
-	<node pkg="speedydug_servers" type="spin_server" name="spin_server">
-		<remap from="/track_point" to="track_point_right"/>
-
-	</node>
+-->
 
 	<node pkg="speedydug_servers" type="approach_server" name="approach_server">
-		<remap from="/track_point" to="track_point_right"/>
+		<remap from="/track_point" to="track_point_avg"/>
 	</node>
+
+	<node pkg="speedydug_servers" type="approach_bucket_server" name="approach_bucket_server">
+	</node>
+
+	<node pkg="speedydug_servers" type="spin_server" name="spin_server">
+		<remap from="/track_point" to="track_point_avg"/>
+	</node>
+	
+	<node pkg="speedydug_servers" type="spin_bucket_server" name="spin_bucket_server">
+	</node>
+
+	<node pkg="speedydug_servers" type="walk_server" name="walk_server">
+		<remap from="/track_point" to="track_point_avg"/>
+	</node>
+
+	<node pkg="speedydug_servers" type="walk_bucket_server" name="walk_bucket_server">
+	</node>
+
+	<node pkg="speedydug_servers" type="move_server" name="move_server">
+	</node>
+
 	
 </launch>

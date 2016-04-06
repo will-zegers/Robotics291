@@ -1,56 +1,61 @@
 #include <ros/ros.h>
 #include <actionlib/server/simple_action_server.h>
-#include <speedydug_servers/ApproachAction.h>
+#include <speedydug_servers/ApproachBucketAction.h>
 #include <geometry_msgs/Point.h>
 #include <geometry_msgs/Twist.h>
 #include <std_msgs/Int32.h>
 
 #define LIN_VEL 0.1
 #define ANG_VEL 0.0
-#define LIN_VEL_BASE 0.013
-#define ANG_VEL_BASE 0.12
+#define LIN_VEL_BASE 0.015
+#define ANG_VEL_BASE 0.13
 #define CAM_WIDTH 320
 #define CAM_HEIGHT 240
-#define LEFT_T 145  
-#define RIGHT_T 175
-#define TOP_T 170
+#define LEFT_T 145.0
+#define RIGHT_T 175.0
+#define TOP_T 110.0
+#define SVTIUS 0  //Safe Value To Ignore Ultra Sonics
 
-class ApproachAction
+class ApproachBucketAction
 {
 protected:
 
   ros::NodeHandle nh_;
   // NodeHandle instance must be created before this line. Otherwise strange error may occur.
-  actionlib::SimpleActionServer<speedydug_servers::ApproachAction> as_; 
+  actionlib::SimpleActionServer<speedydug_servers::ApproachBucketAction> as_;
   std::string action_name_;
   // create messages that are used to published feedback/result
-  speedydug_servers::ApproachFeedback feedback_;
-  speedydug_servers::ApproachResult result_;
+  speedydug_servers::ApproachBucketFeedback feedback_;
+  speedydug_servers::ApproachBucketResult result_;
   ros::Subscriber point_sub_;
   ros::Subscriber us_sub_;
+  ros::Subscriber area_sub_;
   ros::Publisher twist_pub_;
   geometry_msgs::Twist twist_;
   bool has_goal_;
   bool obstacle_detected_;
+  bool drop_flag;
 
 public:
 
-  ApproachAction(std::string name) :
+  ApproachBucketAction(std::string name) :
     as_(nh_, name, false),
     action_name_(name)
   {
 	// register the goal and feeback callbacks
-    as_.registerGoalCallback(boost::bind(&ApproachAction::goalCB, this));
-	as_.registerPreemptCallback(boost::bind(&ApproachAction::preemptCB, this));
+    as_.registerGoalCallback(boost::bind(&ApproachBucketAction::goalCB, this));
+	as_.registerPreemptCallback(boost::bind(&ApproachBucketAction::preemptCB, this));
 	twist_pub_ = nh_.advertise<geometry_msgs::Twist>("/cmd_vel", 1);
-	point_sub_ = nh_.subscribe("/track_point", 1, &ApproachAction::trackPointCB, this);
-    us_sub_ = nh_.subscribe("/obstacle", 1, &ApproachAction::ultraSonicsCB, this);
-    obstacle_detected_=false;
-
+    us_sub_ = nh_.subscribe("/obstacle", 1, &ApproachBucketAction::ultraSonicsCB, this);
+	point_sub_ = nh_.subscribe("track_bucket_point_avg", 1, &ApproachBucketAction::trackPointCB, this);
+	area_sub_ = nh_.subscribe("track_bucket_area", 1, &ApproachBucketAction::trackAreaCB, this);
+	obstacle_detected_=false;
+	drop_flag = false;
+	
     as_.start();
   }
 
-  ~ApproachAction(void)
+  ~ApproachBucketAction(void)
   {
   }
 
@@ -67,7 +72,7 @@ public:
     as_.setPreempted();
   }
 
-  // Helper methods for proportional control 
+  // Helper methods for proportional control
   float getAngVel(int xCurr, int xGoal){
 	float prop;
 	prop = fabs(xGoal - xCurr)/(0.5*CAM_WIDTH);
@@ -99,10 +104,19 @@ public:
 		  return;
 	  }
 
-      twist_.angular.z = 0;
-      twist_.linear.x = 0; 
+	  if( obstacle_detected_ && msg->y < SVTIUS)
+	  {
+		  result_.success = false;
+		  ROS_INFO("%s: Obsticle Detected", action_name_.c_str());
+		  // set the action state to succeeded
+		  as_.setSucceeded(result_);
+	  }
 
-	  if ( msg->y >= TOP_T 
+	  feedback_.success = false;
+	  twist_.angular.z = 0;
+	  twist_.linear.x = 0;
+
+	  if ( msg->y >= TOP_T
 		&& msg->x <= RIGHT_T
 		&& msg->x >= LEFT_T )
 	  {
@@ -110,6 +124,15 @@ public:
 		  ROS_INFO("%s: Succeeded", action_name_.c_str());
 		  // set the action state to succeeded
 		  result_.success = true;
+		  as_.setSucceeded(result_);
+	  }
+
+	  if(drop_flag) {
+	  	twist_pub_.publish(twist_);
+		  ROS_INFO("%s: Succeeded", action_name_.c_str());
+		  // set the action state to succeeded
+		  result_.success = true;
+		  drop_flag = false;
 		  as_.setSucceeded(result_);
 	  }
 
@@ -131,7 +154,7 @@ public:
 	  }
 
 	  twist_pub_.publish(twist_);
-	  //as_.publishFeedback(feedback_);
+	  as_.publishFeedback(feedback_);
   }
 
   void ultraSonicsCB(const std_msgs::Int32::ConstPtr& dist)
@@ -141,25 +164,29 @@ public:
           return;
       obstacle_detected_ = false;
       if ( dist->data > 0 ){
-          twist_.angular.z = 0;
-          twist_.linear.x = 0; 
-		  twist_pub_.publish(twist_);
-		  result_.success = false;
-		  ROS_INFO("%s: Obsticle Detected", action_name_.c_str());
-		  // set the action state to succeeded
-		  as_.setSucceeded(result_);
-	  }
+          obstacle_detected_ = true;
+      }
   }
 
-
+  void trackAreaCB(const std_msgs::Int32::ConstPtr& area)
+  {
+      // make sure that the action hasn't been canceled
+      if (!as_.isActive())
+          return;
+      drop_flag = false;
+      if ( area->data > 38000 ){
+          drop_flag = true;
+      }
+  }
 };
+
 
 
 int main(int argc, char** argv)
 {
-  ros::init(argc, argv, "approach");
+  ros::init(argc, argv, "approach_bucket");
 
-  ApproachAction approach("approach");//ros::this_node::getName());
+  ApproachBucketAction approach_bucket("approach_bucket");//ros::this_node::getName());
   ros::spin();
 
   return 0;

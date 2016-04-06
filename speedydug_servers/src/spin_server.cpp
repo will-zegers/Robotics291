@@ -4,8 +4,7 @@
 #include <geometry_msgs/Point.h>
 #include <geometry_msgs/Twist.h>
 
-#define LIN_VEL 0.1
-#define ANG_VEL 0.3
+#define ANG_VEL 0.3141592653
 
 class SpinAction
 {
@@ -13,7 +12,7 @@ protected:
 
   ros::NodeHandle nh_;
   // NodeHandle instance must be created before this line. Otherwise strange error may occur.
-  actionlib::SimpleActionServer<speedydug_servers::SpinAction> as_; 
+  actionlib::SimpleActionServer<speedydug_servers::SpinAction> as_;
   std::string action_name_;
   // create messages that are used to published feedback/result
   speedydug_servers::SpinFeedback feedback_;
@@ -32,6 +31,8 @@ public:
 	// register the goal and feeback callbacks
 	point_sub_ = nh_.subscribe("/track_point", 1, &SpinAction::trackPointCB, this);
 	twist_pub_ = nh_.advertise<geometry_msgs::Twist>("/cmd_vel", 1);
+	ball_detected_=false;
+
     as_.start();
   }
 
@@ -45,46 +46,44 @@ public:
 	  // helper variables
 	  ball_detected_ = false;
       feedback_.success = false;
-	  ros::Duration d(1.0);
-	  float x = 0.0;
-	  float z = 0.3 ;
-	  float xStep = (0.20 - x)/goal->seconds;
-	  float zStep = (0.10 - z)/goal->seconds;
+	  float z;
+	  ros::Duration d(0.05);
+
+	  if( goal->left ){
+		  z = ANG_VEL;
+	  }
+	  else {
+		  z = -1.0 * ANG_VEL;
+      }
+	  ROS_INFO(goal->left ? "true" : "false");
+	  ROS_INFO("z = %f", z);
 
 	  while(!ball_detected_)
 	  {
 		  // check that preempt has not been requested by the client
 		  if (as_.isPreemptRequested() || !ros::ok())
 		  {
+			  twist_.angular.z = 0;
+			  twist_.linear.x = 0;
+			  twist_pub_.publish(twist_);
 			  ROS_INFO("%s: Preempted", action_name_.c_str());
 			  // set the action state to preempted
 			  as_.setPreempted();
 			  break;
 		  }
-		  
-		  if( x >= 0.20 && z <= 1.0 )
-		  {
-			  twist_.angular.z = 0.0;
-			  twist_.linear.x = 0.0;
-			  twist_pub_.publish(twist_);
 
-			  as_.setPreempted();
-			  break;
-		  }
-		  else
-		  {
-			  twist_.angular.z = z;
-			  twist_.linear.x = x;
-			  twist_pub_.publish(twist_);
-			  x += xStep;
-			  z += zStep;
-			  as_.publishFeedback(feedback_);
-		  }
+		  twist_.angular.z = z;
+		  twist_.linear.x = 0;
+		  twist_pub_.publish(twist_);
+		  as_.publishFeedback(feedback_);
 		  d.sleep();
 	  }
 
 	  if( ball_detected_ )
 	  {
+		  twist_.angular.z = 0;
+		  twist_.linear.x = 0;
+		  twist_pub_.publish(twist_);
 		  result_.success = true;
 		  ROS_INFO("%s: Succeeded", action_name_.c_str());
 		  // set the action state to succeeded

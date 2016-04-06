@@ -1,10 +1,10 @@
 #include "Ultrasonic.h"
 #include "TimerOne.h"
 
-#define red_trig_pin  13
-#define red_echo_pin  12
-#define blue_trig_pin 11
-#define blue_echo_pin 10
+#define red_trig_pin  12
+#define red_echo_pin  13
+#define blue_trig_pin 10
+#define blue_echo_pin 11
 #define PERIOD        100000
 #define THRESHOLD     6.0 //inches
 

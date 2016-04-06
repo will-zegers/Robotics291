@@ -63,14 +63,19 @@ find_package(catkin REQUIRED COMPONENTS
 add_action_files(
 	DIRECTORY action
   	FILES
+    Move.action
    	Approach.action
-# TODO Spin.action
+    ApproachBucket.action
+    Spin.action
+    SpinBucket.action
+    Walk.action
+    WalkBucket.action	
 )
 
 ## Generate added messages and services with any dependencies listed here
 generate_messages(
 	DEPENDENCIES
-  	std_msgs
+  std_msgs
 	actionlib_msgs
 )
 
@@ -144,29 +149,95 @@ include_directories(
 #   ${catkin_LIBRARIES}
 # )
 
-add_executable(approach_server src/approach_server.cpp)
+#### SERVERS
+
+# add_executable(approach_server src/approach_server.cpp)
+
+# target_link_libraries(
+#   approach_server
+#   ${catkin_LIBRARIES}
+# )
+
+# add_dependencies(
+#   approach_server
+#   ${speedydug_servers_EXPORTED_TARGETS}
+# )
+
+
+# add_executable(spin_server src/spin_server.cpp)
+
+# target_link_libraries(
+#   spin_server
+#   ${catkin_LIBRARIES}
+# )
+
+# add_dependencies(
+#   spin_server
+#   ${speedydug_servers_EXPORTED_TARGETS}
+# )
+
+add_executable(move_server src/move_server.cpp)
 
 target_link_libraries(
-  approach_server
+  move_server
   ${catkin_LIBRARIES}
 )
 
 add_dependencies(
-  approach_server
+  move_server
   ${speedydug_servers_EXPORTED_TARGETS}
 )
 
-add_executable(approach_client src/approach_client.cpp)
+# add_executable(walk_server src/walk_server.cpp)
 
-target_link_libraries( 
-  approach_client
+# target_link_libraries(
+#   walk_server
+#   ${catkin_LIBRARIES}
+# )
+
+# add_dependencies(
+#   walk_server
+#   ${speedydug_servers_EXPORTED_TARGETS}
+# )
+
+
+# add_executable(approach_bucket_server src/approach_bucket_server.cpp)
+
+# target_link_libraries(
+#   approach_bucket_server
+#   ${catkin_LIBRARIES}
+# )
+
+# add_dependencies(
+#   approach_bucket_server
+#   ${speedydug_servers_EXPORTED_TARGETS}
+# )
+
+add_executable(spin_bucket_server src/spin_bucket_server.cpp)
+
+target_link_libraries(
+  spin_bucket_server
   ${catkin_LIBRARIES}
 )
 
 add_dependencies(
-  approach_client
+  spin_bucket_server
   ${speedydug_servers_EXPORTED_TARGETS}
 )
+
+
+add_executable(walk_bucket_server src/walk_bucket_server.cpp)
+
+target_link_libraries(
+  walk_bucket_server
+  ${catkin_LIBRARIES}
+)
+
+add_dependencies(
+  walk_bucket_server
+  ${speedydug_servers_EXPORTED_TARGETS}
+)
+
 
 #############
 ## Install ##

@@ -1,16 +1,14 @@
 <launch>
-	<!--
     <node pkg="assignment3" type="detect" name="detect" />
-	-->
 
 	<node pkg="speedydug_servers" type="spin_server" name="spin_server">
 		<remap from="/cmd_vel" to="/turtle1/cmd_vel"/>
-		<remap from="/track_point" to="track_point_right"/>
+		<remap from="/track_point" to="track_point"/>
 	</node>
 
 	<node pkg="speedydug_servers" type="approach_server" name="approach_server">
 		<remap from="/cmd_vel" to="/turtle1/cmd_vel"/>
-		<remap from="/track_point" to="track_point_right"/>
+		<remap from="/track_point" to="track_point"/>
 	</node>
 
 	<node pkg="turtlesim" type="turtlesim_node" name="turtlesim_node" />

@@ -1,0 +1,17 @@
+#goal definition
+#########################################
+# Action for moving base unconditionally
+# 0 = stay 
+# 1 = turn left
+# 2 = turn right
+# 3 = back up
+#########################################
+int32 move
+
+---
+#result definition
+bool success
+
+---
+#feedback
+bool success

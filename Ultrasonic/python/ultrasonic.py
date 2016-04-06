@@ -7,7 +7,7 @@ class Ultrasonic(object):
 		self.ser = serial.Serial(port, baud)
 
 	def read(self):
-		self.ser.write('\x01')
+		self.ser.write("\x01")
 		line = self.ser.read()
 		sys.stdout.write(line)
 		self.ser.flushInput()

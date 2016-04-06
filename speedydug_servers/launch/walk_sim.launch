@@ -1,0 +1,16 @@
+<launch>
+
+	<node pkg="speedydug_servers" type="spin_server" name="spin_server" output="screen">
+		<remap from="/track_point" to="track_point_avg"/>
+		<remap from="/cmd_vel" to="/turtle1/cmd_vel"/>
+	</node>
+
+	<node pkg="speedydug_servers" type="walk_server" name="walk_server">
+		<remap from="/cmd_vel" to="/turtle1/cmd_vel"/>
+		<remap from="/track_point" to="track_point"/>
+	</node>
+
+	<node pkg="turtlesim" type="turtlesim_node" name="turtlesim_node" />
+	<node pkg="speedydug_servers" type="wall_turtlesim.py" name="US_sim"/>
+
+</launch>
